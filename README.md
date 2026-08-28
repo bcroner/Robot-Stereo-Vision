@@ -1,4 +1,6 @@
-# RZN AI — Foveal Spiral Stereo Input Engine
+# Robot Stereo Vision
+
+### RZN AI — Foveal Spiral Stereo Input Engine
 
 Reference implementation in C11. Property of RZN AI.
 

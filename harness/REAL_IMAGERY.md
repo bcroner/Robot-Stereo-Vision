@@ -101,6 +101,62 @@ and re-enters a non-square sensor.
 
 ---
 
+## A handheld pair — what an uncontrolled rig actually does
+
+Two handheld phone photographs of the same indoor scene, taken seconds apart,
+supplied by the author. 2316x3088 downscaled to 480x640. These are not from a
+rig: the camera was free in the hand, so there is translation *and* rotation
+between the frames.
+
+**I-frame:** 307 200 pixel addresses on a 480x640 sensor — exactly W x H, every
+pixel addressed once. The spiral handles real imagery with no special casing.
+
+**Delta, frame to frame:**
+
+| change threshold | delta pixels | share of frame | vs dense |
+|---|---|---|---|
+| 0 | 306 284 | 99.7% | 1.0x |
+| 4 | 264 843 | 86.2% | 1.1x |
+| 8 | 205 955 | 67.0% | 1.4x |
+| 16 | 116 179 | 37.8% | 2.4x |
+| 32 | 49 174 | 16.0% | 5.9x |
+
+Nearly the whole frame changes. The per-pixel difference distribution says why:
+
+| max-channel difference | share |
+|---|---|
+| 0–3 levels (consistent with sensor noise) | **9.2%** |
+| > 3 levels (genuine scene or camera motion) | **90.8%** |
+
+So this is a *moving* camera, not a noise floor. **It still does not measure
+the static-rig case**, which is the one the 38x figure came from and the one a
+robot actually operates in. That measurement continues to be owed; it needs two
+frames from a camera that did not move.
+
+**Disparity on an unrectified pair: incoherent.** The coarse map
+(`rzn_real -map 16`) shows no depth structure at all — the near subject does not
+separate from the far hallway, and neighbouring cells disagree wildly:
+
+```
+  5 16 22 24 18 21 17 20 19 25 26 21  6  3  6  5
+ 10 35 37 28 23 25 20  6  8 20 34  8  4 17  2  9
+  8 24 33 37 42 21  6 13  0  4  1  6  6 27  4 17
+  2  4  5  0 12  8 16  1  1  0  0 10  6 20 10 12
+```
+
+This is the documented precondition failing, not a defect. The disparity stage
+searches **along the scanline**, which is only valid when the two views are
+rectified — coplanar sensors, no relative rotation. A handheld pair violates
+that, so correspondences leave the row and the block matcher locks onto noise.
+
+It is worth having measured. The "rigid, coplanar mount" in the design is
+load-bearing: on properly rectified imagery the same code returns 0.69–1.95 px
+mean error (above), and on a handheld pair it returns nothing usable. Anyone
+building this rig should treat mechanical rigidity and rectification as a
+correctness requirement, not a quality nicety.
+
+---
+
 ## Reproducing
 
 ```bash
@@ -116,4 +172,8 @@ DISPARITY=1 sh build.sh
 
 `rzn_real` takes any number of L/R pairs; the first builds the I-frame and each
 one after exercises the delta path. `-d` scores disparity against a ground-truth
-PGM, `-s` sets its scaling.
+PGM, `-s` sets its scaling, and `-map COLS` prints a coarse mean-disparity grid
+when no ground truth is available.
+
+No imagery is committed to this repo. The Middlebury set is fetched by URL
+above; the handheld pair was processed locally and only the numbers kept.

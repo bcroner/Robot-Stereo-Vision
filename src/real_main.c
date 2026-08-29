@@ -63,6 +63,7 @@ static bool sink_count(int32_t word, void *ctx)
 int main(int argc, char **argv)
 {
     int32_t threshold = 0, sx = -1, sy = -1, dscale = 8;
+    int mapcols = 0;
     const char *truth = NULL;
     const char *paths[64];
     int npaths = 0, i;
@@ -78,11 +79,13 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-y") && i + 1 < argc) sy = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-s") && i + 1 < argc) dscale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-d") && i + 1 < argc) truth = argv[++i];
+        else if (!strcmp(argv[i], "-map") && i + 1 < argc) mapcols = atoi(argv[++i]);
         else if (npaths < 64) paths[npaths++] = argv[i];
     }
 
     if (npaths < 2 || (npaths % 2) != 0) {
-        printf("usage: rzn_real [-t THR] [-x X] [-y Y] [-d TRUTH.pgm [-s SCALE]] "
+        printf("usage: rzn_real [-t THR] [-x X] [-y Y] [-map COLS] "
+               "[-d TRUTH.pgm [-s SCALE]] "
                "L1.ppm R1.ppm [L2.ppm R2.ppm ...]\n");
         return 2;
     }
@@ -172,6 +175,41 @@ int main(int argc, char **argv)
     }
 
 #ifdef RZN_ENABLE_DISPARITY
+    if (mapcols > 0) {
+        rzn_disparity_cfg cfg;
+        int32_t cw, gx, gy, gcols = mapcols, grows;
+
+        rzn_disparity_default(&cfg);
+        cw = cur.left.w / gcols;
+        if (cw < 1) cw = 1;
+        grows = cur.left.h / cw;
+
+        printf("\ncoarse disparity map -- mean px per cell, '.' = no match\n");
+        printf("search %d..%d px, %dx%d window, cell %dx%d px\n\n",
+               cfg.min_disparity, cfg.max_disparity,
+               cfg.window * 2 + 1, cfg.window * 2 + 1, cw, cw);
+
+        for (gy = 0; gy < grows; gy++) {
+            for (gx = 0; gx < gcols; gx++) {
+                long sum = 0, cnt = 0;
+                int32_t px, py;
+                for (py = gy * cw; py < (gy + 1) * cw; py += 4)
+                    for (px = gx * cw; px < (gx + 1) * cw; px += 4) {
+                        int32_t d;
+                        if (px < cfg.window || py < cfg.window ||
+                            px >= cur.left.w - cfg.window ||
+                            py >= cur.left.h - cfg.window) continue;
+                        d = rzn_disparity_at(&cur, &cfg, px, py);
+                        if (d == RZN_DISPARITY_NONE) continue;
+                        sum += d; cnt++;
+                    }
+                if (cnt) printf("%3ld", sum / cnt);
+                else     printf("  .");
+            }
+            printf("\n");
+        }
+    }
+
     if (truth) {
         int32_t tw, th, x, y;
         uint8_t *tp = 0;

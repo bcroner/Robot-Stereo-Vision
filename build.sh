@@ -23,10 +23,13 @@ mkdir -p build
 echo "building demo..."
 $CC $CFLAGS $CORE src/demo_main.c -o build/rzn_demo
 
+echo "building the real-imagery driver..."
+$CC $CFLAGS $CORE src/real_main.c -o build/rzn_real
+
 echo "building tests..."
 $CC $CFLAGS $CORE test/test_rzn.c -o build/rzn_test
 
-echo "ok (profile $PROFILE) -> build/rzn_demo, build/rzn_test"
+echo "ok (profile $PROFILE) -> build/rzn_demo, build/rzn_real, build/rzn_test"
 
 if [ "$1" = "test" ]; then
     ./build/rzn_test

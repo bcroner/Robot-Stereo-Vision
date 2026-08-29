@@ -68,23 +68,19 @@ moves. After that the engine is event-driven.
 
 ```mermaid
 graph TD
-    START["New attention seed"] --> IFRAME["I-frame — walk the spiral from ring 0"]
-    IFRAME --> INB{"Cell on a<br/>physical pixel?"}
-    INB -->|yes| EMIT["Emit both cameras, one address"]
-    INB -->|no| SKIP["Skip silently"]
-    EMIT --> NEXT["Next cell"]
-    SKIP --> NEXT
-    NEXT --> RING{"Whole ring<br/>produced zero hits?"}
-    RING -->|no| INB
-    RING -->|yes| DONE["I-frame complete<br/>every sensor pixel addressed once"]
-
-    DONE --> DELTA["Delta path — every frame after"]
-    DELTA --> ISP["ISP or NPE reports changed pixels"]
-    ISP -->|"rzn_xy_to_spiral — O(1)"| SORT["Sort by spiral index<br/>fovea-first"]
-    SORT --> SEND["Emit only the cameras that changed"]
-    SEND --> DELTA
-
-    MOVE["Robot brain moves the seed"] --> START
+    A["Start — attention seed, ring 0"] --> B["Step +X — begin new ring"]
+    B --> C["Traverse the ring — down, left, up, right"]
+    C --> D{"Cell on a physically<br/>present pixel?"}
+    D -->|yes| E["Feed the AGI both cameras<br/>colour values at that address"]
+    D -->|no| F["Skip silently"]
+    E --> R{"More cells<br/>in this ring?"}
+    F --> R
+    R -->|yes| C
+    R -->|no| G{"Did the whole ring<br/>produce zero pixels?"}
+    G -->|no| B
+    G -->|yes| H["I-frame complete —<br/>every sensor pixel addressed once"]
+    H --> I["Delta path — only changed addresses,<br/>ordered fovea-first, forever after"]
+    M["Robot brain moves the seed"] --> A
 ```
 
 ### Ring arithmetic
@@ -196,6 +192,24 @@ profile 16 its sensor bit carries a *more chunks follow* flag instead.
 `rzn_index_more()` reads it, and is always false under profile 32 — one reader
 handles both.
 
+### The output path
+
+```mermaid
+graph TD
+    A["Foveal engine — I-frame or delta updates"] --> B["Packer — profile 32 or 16"]
+    B --> C["Ring buffer sink — asynchronous"]
+    C -->|"popped on demand by in_0 / in_1"| D["rzn_bridge_read<br/>strips sensor and source bits"]
+    D --> E["read_sensory — bitwise assembly<br/>payload, sensor id, source flag"]
+    E --> F["AGI_Sys Current_Input"]
+    F --> G["AGI_Sys Input_Queue"]
+```
+
+The bridge strips exactly the bits `read_sensory()` puts back:
+`word >> RZN_PAYLOAD_SHIFT` on the way out, then
+`(reading << sensory_bits | sensor) << 1 | source` on the way in. That round
+trip is why no translation layer is needed — the model's own packing reproduces
+the profile layout exactly.
+
 **Multi-word burst**, chosen over single-word packing so colour survives. One
 pixel normally costs 2 words: an `INDEX` word is emitted only when the index is
 *not* previous + 1. The I-frame scan is contiguous by construction, so index
@@ -289,8 +303,15 @@ default rather than a compromise.
 **Read these honestly.** The ratio is scene-dependent by construction: a still
 scene approaches zero cost, a full-field camera pan approaches dense cost. The
 speedup comes from sparsity, and sparsity comes from the scene. Quote the
-number against a named workload, never in the abstract. The demo prints the
-per-frame ratio so any workload can be characterised directly.
+number against a named workload, never in the abstract.
+
+**These figures are synthetic.** Measured on real photographs
+([harness/REAL_IMAGERY.md](harness/REAL_IMAGERY.md)) the worst case — a rig
+translating a full view-step, every pixel genuinely changing — gives 1.0x at
+threshold 0 and 2-6x at sensible thresholds. The 38x case, a static camera
+watching a small moving subject, has **not** been measured on real imagery,
+because the dataset used provides viewpoints rather than time. That measurement
+is still owed.
 
 ---
 

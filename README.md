@@ -34,6 +34,59 @@ is complete.
 **3. Deltas, forever after.** An ISP or Neural Processing Engine reports which
 pixels changed. Only those addresses are re-fed, ordered fovea-first.
 
+### The address model
+
+The rig establishes one coordinate frame; the seed picks the spiral's origin
+inside it. A single retinal address then reaches both cameras at once — that is
+the whole trick, and everything downstream follows from it.
+
+```mermaid
+graph TD
+    F["Rigid coplanar mount"] -->|establishes| C["Shared retinal coordinate frame"]
+    D["Left camera sensor<br/>identical resolution"] --- F
+    E["Right camera sensor<br/>identical resolution"] --- F
+
+    A["Robot brain"] -->|nominates| B["Attention seed X, Y"]
+    B -->|"origin of the spiral, inside the frame"| C
+
+    C --> S["Square-ring spiral walk<br/>ring r holds 8r cells"]
+    S -->|"rzn_spiral_to_xy — O(1)"| G["Single retinal address"]
+
+    G -->|simultaneous pointer| D
+    G -->|simultaneous pointer| E
+
+    D --> P["Both colour values<br/>at one address"]
+    E --> P
+    P -->|rzn_pack_pixel| W["AGI input words"]
+    W --> Q["AGI_Sys Input_Queue"]
+```
+
+### The frame lifecycle
+
+The spiral runs once to build the I-frame, then never again unless attention
+moves. After that the engine is event-driven.
+
+```mermaid
+graph TD
+    START["New attention seed"] --> IFRAME["I-frame — walk the spiral from ring 0"]
+    IFRAME --> INB{"Cell on a<br/>physical pixel?"}
+    INB -->|yes| EMIT["Emit both cameras, one address"]
+    INB -->|no| SKIP["Skip silently"]
+    EMIT --> NEXT["Next cell"]
+    SKIP --> NEXT
+    NEXT --> RING{"Whole ring<br/>produced zero hits?"}
+    RING -->|no| INB
+    RING -->|yes| DONE["I-frame complete<br/>every sensor pixel addressed once"]
+
+    DONE --> DELTA["Delta path — every frame after"]
+    DELTA --> ISP["ISP or NPE reports changed pixels"]
+    ISP -->|"rzn_xy_to_spiral — O(1)"| SORT["Sort by spiral index<br/>fovea-first"]
+    SORT --> SEND["Emit only the cameras that changed"]
+    SEND --> DELTA
+
+    MOVE["Robot brain moves the seed"] --> START
+```
+
 ### Ring arithmetic
 
 ```
